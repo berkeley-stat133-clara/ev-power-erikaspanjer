@@ -1,6 +1,6 @@
 ---
 title: "EV Power - Lab 4 Project Report"
-format: typst
+format: pdf
 ---
 
 # Example Solution 1
@@ -8,27 +8,104 @@ format: typst
 ## **Part 0: libraries**
 
 ```{r}
-
+#| echo: false
+library(tidyverse)
+library(readr)
+library(ggplot2)
+library(dplyr)
+library(knitr)
+library(lubridate)
+library(maps)
+library(stringr)
+library(usdata)
 ```
 
 ## **Part 1:** **Defining Research Question**
 
-Chosen Question:
+Chosen Question: Do states with a higher share of renewable energy sources also have higher EV registrations?
 
 ## **Part 2: Data Preparation and Cleaning**
 
 ```{r}
+#| echo: false
+# load in csv files
+ev_registrations = read.csv("/Users/erika.spanjer/Documents/stat133/berkeley-stat133-clara-classroom-ev-power-ev-power/data/ev-registrations-by-state-2023.csv")
+renew_use = read.csv("/Users/erika.spanjer/Documents/stat133/berkeley-stat133-clara-classroom-ev-power-ev-power/data/renew-use-2023.csv")
+total_use = read.csv("/Users/erika.spanjer/Documents/stat133/berkeley-stat133-clara-classroom-ev-power-ev-power/data/total-use-2023.csv")
 
+# in renew_use dataframe: remove units and make state abbreviations consistent
+renew_use$Renewable_Use_2023 = as.numeric(str_remove(renew_use$Renewable_Use_2023, pattern = " ?[MGk]Wh"))
+renew_use$State = str_to_upper(renew_use$State)
+
+# in ev_registrations dataframe: remove #, ~, EVs, any additional spaces, first 3 rows, last row. Make state abbr and add DC
+ev_registrations$X = str_remove_all(ev_registrations$X, "[^0-9]")
+names(ev_registrations)[1] = "State_Name"
+names(ev_registrations)[2] = "Num_EVs"
+ev_registrations = ev_registrations |>
+    mutate(State = state.abb[match(State_Name, state.name)]) |>
+    slice(-n()) |> 
+    slice(-c(1:2)) |>
+    select(-State_Name)
+ev_registrations$State[9] = "DC"
+
+# show results
+head(ev_registrations, 5)
+head(renew_use, 5)
 ```
 
 ## **Part 3: Joining / Pivoting Datasets for Analysis**
 
 ```{r}
+#| echo: false
 
+#join data sets based on state
+renew_use = renew_use |>
+    group_by(State) |>
+    summarise(Renewable_Use = sum(Renewable_Use_2023, na.rm=T)) 
+
+renew_and_ev = renew_use |>
+    left_join(ev_registrations, by = "State")
+
+us_map <- map_data("state")
+us_map = us_map |>
+    mutate(State = state.abb[match(region, tolower(state.name))])
+us_map
+us_map_data = us_map |>
+    left_join(renew_and_ev, by = c("State" = "State")) |>
+    select(-region)
+# show results
+
+head(us_map_data, 5)
 ```
 
 ## **Part 4: Mapping Visualization**
 
 ```{r}
+#| echo: false
 
+ggplot(us_map_data, aes(long, lat, group = group, fill = Renewable_Use)) +
+ geom_polygon(color = "white") +
+ coord_fixed(1.3) +
+ theme_classic() +
+ scale_fill_viridis_c(option = "magma") +
+ theme(axis.title = element_blank(),
+      axis.text = element_blank(),
+      axis.ticks = element_blank(),
+      axis.line = element_blank()) +
+ labs(title = "Average Renew Use by State", fill = "Renewable Energy Usage")
+
+ggplot(us_map_data, aes(long, lat, group = group, fill = as.numeric(Num_EVs))) +
+ geom_polygon(color = "white") +
+ coord_fixed(1.3) +
+ theme_classic() +
+ scale_fill_viridis_c(option = "magma") +
+ theme(axis.title = element_blank(),
+      axis.text = element_blank(),
+      axis.ticks = element_blank(),
+      axis.line = element_blank()) +
+ labs(title = "Average EV Registrations by State", fill = "Number of EV Registrations")
 ```
+
+## Analysis
+
+The state with the most renewable energy also has the most number of EVs. This is California, so a part of these numbers could be attributed to its large population. Florida, Texas, and Washington have the next highest number of EV registrations and they also appear higher on the renewable usage scale. Overall, there is a trend between renewable energy usage and number of EV registrations but some of this trend could be attributed to population size of the state.
